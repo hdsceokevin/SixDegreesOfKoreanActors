@@ -1,0 +1,79 @@
+---
+title: "Korean version of Six Degrees of Kevin Bacon"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## 한국판 케빈 베이컨 놀이
+
+케빈 베이컨의 여섯 다리(영어: Six Degrees of Kevin Bacon)는 어떤 배우와 케빈 베이컨까지 최단의 연결 고리를 만드는 놀이이다.  
+이는 케빈 케이컨이 매우 다작(多作)하는 배우라는 것이 근거가 된다.
+
+* 출처: [위키백과] 케빈 베이컨의 여섯 다리 <https://ko.wikipedia.org/wiki/%EC%BC%80%EB%B9%88_%EB%B2%A0%EC%9D%B4%EC%BB%A8%EC%9D%98_%EC%97%AC%EC%84%AF_%EB%8B%A4%EB%A6%AC>
+
+* 작성일자: 2017년 7월 14일
+
+
+```{r}
+# import libraries
+library(readxl)
+library(reshape2)
+library(igraph)
+library(network)
+library(sna)
+library(ggplot2)
+library(GGally)
+library(scales)
+library(Hmisc)
+```
+
+
+```{r}
+# read Korean movie list
+mList <- read_excel("../data/Korean movie_20170714.xlsx")
+str(mList)
+head(mList)
+```
+
+
+```{r}
+# read Korean movie information
+yList <- read_excel("../data/Korean movie year_20170714.xlsx")
+str(yList)
+head(yList)
+```
+
+
+```{r}
+# read Korean movies actors and actresses list
+aList <- read_excel("../data/Korean movie and actor_20170714.xlsx")
+str(aList)
+head(aList)
+```
+
+```{r}
+# delete unnecessary columns
+mList <- mList[, c(-2)]
+aList <- aList[, c(-2)]
+```
+
+```{r}
+# merge dataframes
+df <- merge(aList, mList, by = "movieCode", all.x = T)
+df <- merge(df, yList, by = "movieCode", all.x = T)
+
+# arrange columns
+df <- df[, c("movieCode", "movieName", "actorCode", "actorName", "year")]
+```
+
+```{r}
+# order by movie codes
+df <- df[order(df$movieCode),]
+head(df)
+```
+
+
+# To be continued...
