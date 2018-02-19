@@ -34,3 +34,7 @@ vignettes/*.pdf
 
 # for Mac
 .DS_Store
+.Rproj.user
+
+# for jupyter notebook
+.ipynb_checkpoints/
