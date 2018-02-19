@@ -326,6 +326,9 @@ plot(graphDf,
 
 
 
+# save Rdata
+save.image(file = 'korean_six_degrees_20180219.Rdata')
+
 
 # 네트워크 그래프 그리기
 # 배우 간 행렬로부터 방향성 없는 무향 네트워크 객체 생성
