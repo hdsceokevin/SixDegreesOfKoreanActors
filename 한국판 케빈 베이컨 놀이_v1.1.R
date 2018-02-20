@@ -6,6 +6,9 @@ gc()
 # 작업폴더 확인
 getwd()
 
+# 작업일자 지정
+wdate <- format(x = Sys.Date(), '%Y%m%d')
+
 # 한글 폰트 지정
 par(family = 'NanumGothic')
 
@@ -257,7 +260,7 @@ dim(actorsMat)
 actorsMat[11:20, 11:20]
 
 # save Rdata
-# save.image(file = 'korean_six_degrees_20180220.Rdata')
+# save.image(file = paste0('./data/korean_six_degrees_', wdate, '.Rdata'))
 
 
 
@@ -415,4 +418,4 @@ actorName <- actorName[order(actorName$mean, decreasing = FALSE), ]
 head(x = actorName, n = 20L)
 
 # save Rdata
-# save.image(file = 'korean_six_degrees_20180220.Rdata')
+# save.image(file = paste0('./data/korean_six_degrees_', wdate, '.Rdata'))
