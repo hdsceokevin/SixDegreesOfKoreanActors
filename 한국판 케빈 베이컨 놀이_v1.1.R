@@ -13,7 +13,7 @@ wdate <- format(x = Sys.Date(), '%Y%m%d')
 par(family = 'NanumGothic')
 
 
-# part 1 : 데이터 수집 ----
+# part 1. 데이터 수집 ----
 
 # 이번 프로젝트를 위해 R로 웹크롤러를 만들어 네이버 영화 사이트의 데이터를 수집
 # 웹크롤러는 'naver movie crawler_v1.R'이며,
@@ -24,14 +24,15 @@ par(family = 'NanumGothic')
 # 한국영화 27,121편에 대한 요약정보 수집 (korean_movie_list_20180217.RDS)
 # 영화별 출연 배우 리스트를 별도로 수집 (korean_movie_actor_20180217.RDS)
 
-# 데이터 전처리 과정
-# 1. 두 개의 RDS 파일을 불러온 후, 불필요한 행 삭제
-# 2. 하나의 데이터 프레임(wdf)으로 병합
-# 3. 영화별 출연 배우수와 배우별 출연 영화수를 각각 구함
-# 4. 간단한 EDA : 상위 20위 영화/배우 확인 및 히스토그램, 도수분포표 생성
-# 5. 배우수가 2명 이상인 영화와 출연 영화수가 5편 이상인 배우만 남김
-# 6. 영화 * 배우 매트릭스로 변환한 후, 배우 * 배우 매트릭스 생성
-# 7. 마지막으로 각 행렬의 합계가 0인 행과 열 위치를 찾아 삭제
+
+# part 2. 데이터 전처리 과정 ----
+
+# 1. 두 개의 RDS 파일을 읽어온 후, 하나의 데이터 프레임(wdf)으로 병합
+# 2. 영화별 출연 배우수와 배우별 출연 영화수를 각각 구함
+# 3. 간단한 EDA : 상위 20위 영화/배우 확인 및 히스토그램, 도수분포표 생성
+# 4. 배우수가 2명 이상인 영화와 출연 영화수가 5편 이상인 배우만 남김
+# 5. 영화-배우 행렬로 변환한 후, 열 이름을 배우 이름으로 변경
+# 6. 마지막으로 배우-배우 행렬을 생성한 후, 합계가 0인 행의 위치를 찾아 삭제
 
 # 필요 패키지 불러오기
 library(dplyr)
@@ -134,7 +135,6 @@ hist(x = wdf$movieCnt,
 
 # 영화 출연 횟수 데이터로 도수분포표 만들기
 # 계급의 크기를 5로 설정한 후, 각 계급별 빈도수를 구합니다.
-# [주의] Hmisc의 summarize() 함수가 dplyr의 summarize()와 충돌!! 
 cuts <- seq(from = 0, to = 505, by = 5)
 
 mvCntTbl <- wdf %>% 
@@ -160,7 +160,7 @@ mvCntTbl <- addmargins(A = mvCntTbl, margin = 2)  # 행별 합계
 # 소수점 2째자리에서 반올림
 mvCntTbl <- round(x = mvCntTbl, digits = 2)
 
-# 행과 열의 이름을 변경합니다.
+# 행 이름을 변경합니다.
 rownames(mvCntTbl) <- c('빈도수(명)', '상대도수(%)', '누적상대도수(%)')
 
 # 도수분포표 출력하기
@@ -169,9 +169,9 @@ print(mvCntTbl)
 
 
 # 같은 영화에 함께 출연한 배우 데이터를 만들기 위해 DocumentTermMatrix 개념 활용!
-# 매트릭스 차원이 크면 매트릭스 연산에 많은 시간이 소요되므로,
+# 행렬 차원이 크면 행렬 연산에 많은 시간이 소요되므로,
 # 출연한 배우수가 2명 이상인 영화 & 출연한 영화수가 5편 이상인 배우만 남긴 후
-# 영화 * 배우 행렬로 전처리함. 이 때 각 영화에 출연한 횟수(check)를 1로 지정
+# 영화-배우 행렬로 전처리함. 이 때 각 영화에 출연한 횟수(check)를 1로 지정
 # [주의] dplyr의 filter()가 먼저 불려온 stats의 filter()와 충돌!!
 wdf2Mat <- wdf %>% 
   select(c('mcode', 'acode', 'actorCnt', 'movieCnt')) %>% 
@@ -212,19 +212,24 @@ actorName <- transform(`_data` = actorName,
                          )
                        )
 
+# 중복된 이름 확인
+actorName[c(78:82, 116:120), ]
+
+
+# 행렬의 열 이름을 배우코드에서 배우이름으로 변경하기에 앞서
+# 현재 열 이름의 순서와 새로만든 데이터 프레임의 배우코드 순서가 맞는지 확인
 # 배우코드 오름차순으로 정렬
 actorName <- actorName[order(actorName$acode, decreasing = FALSE), ]
 
-# 매트릭스의 열 이름을 배우코드에서 배우이름으로 변경하기에 앞서
-# 현재 열 이름의 순서와 새로만든 데이터 프레임의 배우코드 순서가 맞는지 확인
-setdiff(colnames(wdf2Mat), actorName$acode)
+# 두 벡터가 서로 다른 부분이 있는지 확인
+which(colnames(wdf2Mat) != actorName$acode)
 
 # 열 이름 변경
 colnames(wdf2Mat) <- actorName$anameNew
 
 
-# 배우 * 배우 행렬 만들기
-# 같은 영화에 출연한 횟수를 원소로 갖는 매트릭스 생성
+# 배우-배우 행렬 만들기
+# 같은 영화에 출연한 횟수를 원소로 갖는 행렬 생성
 actorsMat <- t(wdf2Mat) %*% wdf2Mat
 
 # 차원수 확인
@@ -236,7 +241,7 @@ actorsMat[11:20, 11:20]
 # 같은 영화에 출연한 적이 있으면 1, 없으면 0을 갖도록 2 이상을 1로 치환
 actorsMat <- ifelse(test = (actorsMat >= 2), yes = 1, no = 0)
 
-# 현재 매트릭스는 대칭행렬이며 대각원소는 해당 영화배우의 총 출연횟수이므로,
+# 현재 행렬는 대칭행렬이며 대각원소는 해당 영화배우의 총 출연횟수이므로,
 # 대각원소와 상삼각원소를 0으로 치환하여 하삼각행렬만 값을 갖도록 변환
 actorsMat[upper.tri(x = actorsMat, diag = TRUE)] <- 0
 
@@ -265,20 +270,21 @@ actorsMat[11:20, 11:20]
 
 
 
-# part 2. 한국판 케빈 베이컨의 찾기 ----
+# part 3. 한국판 케빈 베이컨의 찾기 ----
 
-# 1. 배우 * 배우 행렬에서 원소의 값이 1인 행 번호(또는 열 번호)만 수집
-# 2. 네트워크 구조로 만들기 위해 행의 배우코드를 'from', 열은 'to'로 지정
+# 1. 배우-배우 행렬에서 원소의 값이 1인 열 번호만 수집
+# 2. 네트워크 객체로 만들기 위해 행의 배우코드를 'from', 열은 'to'로 지정
 # 3. 위 데이터를 graph 객체로 변환 (방향성 없는 '무향'으로 만듬)
 # 4. 배우별 from에서 to에 이르는 가장 짧은 거리를 구함 (연결이 안되면 '99' 강제 할당)
-# 5. 배우별 거리 평균을 구함. 이 값이 가장 짧은 배우를 한국판 케빈 베이컨으로 지정!! 
+# 5. 배우별 거리 평균을 구함. 이 값이 가장 작은 배우를 한국판 케빈 베이컨으로 지정!! 
 
 # 필요 패키지 불러오기
 library(igraph)
 
-# 매트릭스 원소의 값이 1인 열 번호 가져오기 
+# 결과를 저장할 빈 리스트 객체 생성
 ones <- list()
 
+# 행렬 원소의 값이 1인 열 번호 가져오기 
 for (i in 1:nrow(actorsMat)) {
   ones[[i]] <- which(actorsMat[i, ] == 1) %>% as.numeric()
 }
@@ -286,10 +292,12 @@ for (i in 1:nrow(actorsMat)) {
 # 1~10번 행에서 원소의 값이 1인 열 번호 확인!
 ones[1:10]
 
-# 행 이름(from)과 열 이름(to)으로 데이터 프레임 생성하기
-# 이 데이터 프레임에는 행마다 함께 출연한 적 있는 열 번호가 행으로 저장됨
+
+# 결과를 저장할 빈 데이터 프레임 객체 생성
 actorsWdf <- data.frame()
 
+# 행 이름(from)과 열 이름(to)으로 데이터 프레임 생성하기
+# 이 데이터 프레임에는 행마다 함께 출연한 적 있는 열 번호가 행으로 저장됨
 for (i in 1:length(ones)) {
   codf <- data.frame(from = rownames(actorsMat)[i],
                      to = colnames(actorsMat)[ones[[i]]])
@@ -318,22 +326,25 @@ dim(shortPath)
 # 최단거리 미리보기
 shortPath[1:10, 1:10]
 
+# 최단거리 범위 확인
+# 자기 자신은 0, 서로 연결되지 않은 경우 Inf 값을 가짐
+range(shortPath)
+
+# Inf 값을 제외하고는 14가 가장 큰 값임
+range(shortPath, finite = TRUE)
+
+# 서로 연결되는 않은 배우 간 거리를 99로 치환
+# [주의] NA로 변경하면 오히려 평균이 짧아질 수 있으므로 원하는 결과를 얻을 수 없음!
+shortPath <- ifelse(test = (shortPath == Inf), yes = 99, no = shortPath)
+
+
 # [에제] 1번 꼭지점인 이휘재와 직접 연결된 배우(들) 추출
-vrtis <- shortPath['이휘재', ] %>% 
+vrtis1 <- shortPath['이휘재', ] %>% 
   purrr::when(. == 1) %>% 
   which() %>% 
   names()
 
-print(vrtis)
-
-# 이휘재와 직접 연결된 배우들 중 전노민과 직접 연결된 배우(들) 확인
-vrtis <- shortPath[vrtis, '전노민'] %>% 
-  purrr::when(. == 1) %>% 
-  which() %>% 
-  names()
-
-print(vrtis)
-
+print(vrtis1)
 
 # 이휘재(1번 꼭지점)와 직접 연결된 네트워크 그래프 그려보기
 edges <- E(graphObj)[1%--%V(graphObj)]
@@ -362,8 +373,16 @@ plot(x = graphPlt1,
 
 
 # 이휘재와 전노민 사이에 연결된 꼭지점들로 확대한 네트워크 그래프 그리기
+# 이휘재와 직접 연결된 배우들 중 전노민과 직접 연결된 배우(들) 확인
+vrtis2 <- shortPath[vrtis1, '전노민'] %>% 
+  purrr::when(. == 1) %>% 
+  which() %>% 
+  names()
+
+print(vrtis2)
+
 # vrtis <- get.edges(graph = graphObj, es = E(graphObj)[inc(1)])[, 2] %>% c(1)
-edges <- E(graphObj)[c('이휘재', vrtis)%--%V(graphObj)]
+edges <- E(graphObj)[c('이휘재', vrtis2)%--%V(graphObj)]
 
 graphPlt2 <- subgraph.edges(graph = graphObj, eids = edges) %>% 
   simplify(remove.multiple = TRUE, remove.loops = TRUE)
@@ -388,34 +407,26 @@ plot(x = graphPlt2,
      )
 
 
-# 최단거리 범위 확인
-# 자기 자신은 0, 서로 연결되지 않은 경우 Inf 값을 가짐
-range(shortPath)
-
-# 서로 연결되는 않은 배우 간 거리를 99로 치환
-# [주의] NA로 변경하면 오히려 평균이 짧아질 수 있으므로 원하는 결과를 얻을 수 없음!
-shortPath <- ifelse(test = (shortPath == Inf), yes = 99, no = shortPath)
-
 # 행 기준으로 최단거리의 평균 구하기
 pathMean <- data.frame(mean = rowMeans(x = shortPath, na.rm = TRUE))
 
-# 배우코드 열 추가
+# 배우이름 열 추가
 pathMean$anameNew <- rownames(pathMean)
 
 # 행 이름 삭제
 rownames(pathMean) <- c()
 
-# 배우 정보 병합
-actorName <- merge(x = actorName,
-                   y = pathMean,
-                   by = 'anameNew', 
-                   all.Y = TRUE)
+# 배우 정보와 병합
+resultKoKB <- merge(x = actorName,
+                    y = pathMean,
+                    by = 'anameNew', 
+                    all.Y = TRUE)
 
-# 최단거리 짧은 기준으로 정렬
-actorName <- actorName[order(actorName$mean, decreasing = FALSE), ]
+# 최단거리 평균을 기준으로 오름차순 정렬
+resultKoKB <- resultKoKB[order(resultKoKB$mean, decreasing = FALSE), ]
 
 # 상위 20명 확인
-head(x = actorName, n = 20L)
+head(x = resultKoKB, n = 20L)
 
 # save Rdata
 # save.image(file = paste0('./data/korean_six_degrees_', wdate, '.Rdata'))
