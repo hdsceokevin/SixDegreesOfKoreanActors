@@ -9,8 +9,10 @@ getwd()
 # 한글 폰트 지정
 par(family = 'NanumGothic')
 
-# 데이터 수집
-# 이번 프로젝트를 위해 R로 웹크롤러를 만들어 네X버 영화 사이트의 데이터를 수집함
+
+# part 1 : 데이터 수집 ----
+
+# 이번 프로젝트를 위해 R로 웹크롤러를 만들어 네이버 영화 사이트의 데이터를 수집
 # 웹크롤러는 'naver movie crawler_v1.R'이며,
 # 수집한 데이터는 RDS 형태로 저장하여 GitHub data 폴더에 업로드하였음
 # https://github.com/MrKevinNa/SixDegreesOfKoreanActors
@@ -41,14 +43,8 @@ head(movieList)
 # 영화 형식별 빈도수 확인
 table(movieList$formt, useNA = 'ifany')
 
-# (멀쩡한) 영화만 선택! (비디오영화와 성인영화는 제외)
-# movieList <- movieList[movieList$formt %in% c('', 'TV영화', '단편영화', '옴니버스영화'), ]
-
 # 영화 장르별 빈도수 확인
-table(movieList$genre)
-
-# 공연실황 제외
-# movieList <- movieList[movieList$genre != '공연실황', ]
+table(movieList$genre, useNA = 'ifany')
 
 # 제작년도별 영화편수
 mvYearTbl <- table(movieList$myear, exclude = c(NA, '2018', '2020'))
@@ -137,7 +133,6 @@ hist(x = wdf$movieCnt,
 # 계급의 크기를 5로 설정한 후, 각 계급별 빈도수를 구합니다.
 # [주의] Hmisc의 summarize() 함수가 dplyr의 summarize()와 충돌!! 
 cuts <- seq(from = 0, to = 505, by = 5)
-cutLabels <- Hmisc::cut2(x = wdf$movieCnt, cuts = cuts, minmax = TRUE)
 
 mvCntTbl <- wdf %>% 
   select(c('acode', 'movieCnt')) %>% 
@@ -170,30 +165,64 @@ rownames(mvCntTbl) <- c('빈도수(명)', '상대도수(%)', '누적상대도수
 print(mvCntTbl)
 
 
-# 같은 영화에 함께 출연한 배우 데이터를 만들기 위해 DocumentTermMatrix 개념을 활용함!!
-# 매트릭스 차원이 크면 매트릭스 연산에 많은 시간이 소요되므로 미리 축소!! 
-# 출연한 배우수가 2명 이상인 영화 & 출연한 영화수가 5편 이상인 배우만!!
-wdf1 <- wdf[wdf$actorCnt >= 2 & wdf$movieCnt >= 5,
-            c('mcode', 'title', 'myear', 'acode', 'aname', 'actorCnt', 'movieCnt')]
-
-# 첫 10줄만 미리보기
-head(x = wdf1, n = 10L)
-
-# 영화 * 배우 행렬 전처리 : 한 영화에 출연한 횟수를 1로 지정
-wdf1Mat <- wdf1 %>%
+# 같은 영화에 함께 출연한 배우 데이터를 만들기 위해 DocumentTermMatrix 개념 활용!
+# 매트릭스 차원이 크면 매트릭스 연산에 많은 시간이 소요되므로,
+# 출연한 배우수가 2명 이상인 영화 & 출연한 영화수가 5편 이상인 배우만 남긴 후
+# 영화 * 배우 행렬로 전처리함. 이 때 각 영화에 출연한 횟수(check)를 1로 지정
+# [주의] dplyr의 filter()가 먼저 불려온 stats의 filter()와 충돌!!
+wdf2Mat <- wdf %>% 
+  select(c('mcode', 'acode', 'actorCnt', 'movieCnt')) %>% 
+  na.omit() %>% 
+  dplyr::filter(actorCnt >= 2 & movieCnt >= 5) %>% 
   select(c('mcode', 'acode')) %>% 
   mutate(check = 1) %>% 
   acast(formula = mcode ~ acode, fill = 0)
 
 # 차원수 확인
-dim(wdf1Mat)
+dim(wdf2Mat)
 
 # 미리보기
-wdf1Mat[1:10, 1:10]
+wdf2Mat[11:20, 11:20]
+
+
+# 영화배우 코드로는 누구인지 쉽게 알 수 없으므로 영화배우 이름으로 대체!
+# 하지만 영화배우 이름은 중복이 꽤 많을 것으로 추정되므로,
+# 중복 규모 확인 후, 중복되는 영화배우 이름을 변형함 (이름-1, 이름-2, ...)
+actorName <- wdf %>% 
+  select(c('acode', 'aname', 'movieCnt')) %>% 
+  unique() %>% 
+  dplyr::filter(acode %in% colnames(wdf2Mat)) %>% 
+  arrange(aname, desc(movieCnt))
+
+# 이름으로 중복되는 규모 확인 : 4482명 중 283명 
+actorName %>% 
+  select('aname') %>% 
+  duplicated() %>% 
+  sum()
+
+# 중복 이름 변형
+actorName <- transform(`_data` = actorName,
+                       anameNew = ifelse(
+                         test = (duplicated(aname) | duplicated(aname, fromLast = TRUE)),
+                         yes = paste(aname, ave(aname, aname, FUN = seq_along), sep = '-'),
+                         no = aname
+                         )
+                       )
+
+# 배우코드 오름차순으로 정렬
+actorName <- actorName[order(actorName$acode, decreasing = FALSE), ]
+
+# 매트릭스의 열 이름을 배우코드에서 배우이름으로 변경하기에 앞서
+# 현재 열 이름의 순서와 새로만든 데이터 프레임의 배우코드 순서가 맞는지 확인
+setdiff(colnames(wdf2Mat), actorName$acode)
+
+# 열 이름 변경
+colnames(wdf2Mat) <- actorName$anameNew
+
 
 # 배우 * 배우 행렬 만들기
 # 같은 영화에 출연한 횟수를 원소로 갖는 매트릭스 생성
-actorsMat <- t(wdf1Mat) %*% wdf1Mat
+actorsMat <- t(wdf2Mat) %*% wdf2Mat
 
 # 차원수 확인
 dim(actorsMat)
@@ -227,20 +256,22 @@ dim(actorsMat)
 # 미리보기
 actorsMat[11:20, 11:20]
 
+# save Rdata
+# save.image(file = 'korean_six_degrees_20180220.Rdata')
 
-# 케빈 베이컨의 여섯다리!! 
+
+
+
+# part 2. 한국판 케빈 베이컨의 찾기 ----
+
 # 1. 배우 * 배우 행렬에서 원소의 값이 1인 행 번호(또는 열 번호)만 수집
 # 2. 네트워크 구조로 만들기 위해 행의 배우코드를 'from', 열은 'to'로 지정
-# 3. 위 데이터를 graph data frame으로 변환 (방향성 없는 '무향'으로 만듬)
+# 3. 위 데이터를 graph 객체로 변환 (방향성 없는 '무향'으로 만듬)
 # 4. 배우별 from에서 to에 이르는 가장 짧은 거리를 구함 (연결이 안되면 '99' 강제 할당)
 # 5. 배우별 거리 평균을 구함. 이 값이 가장 짧은 배우를 한국판 케빈 베이컨으로 지정!! 
 
 # 필요 패키지 불러오기
 library(igraph)
-library(network)
-library(sna)
-library(GGally)
-library(scales)
 
 # 매트릭스 원소의 값이 1인 열 번호 가져오기 
 ones <- list()
@@ -269,18 +300,90 @@ actorsWdf[duplicated(actorsWdf), ]
 dim(actorsWdf)
 
 
-# 방향성이 없는 무향 graph data frame 생성
-graphDf <- graph.data.frame(d = actorsWdf, directed = FALSE)
-graphDf[1:10]
+# 방향성이 없는 무향 graph 객체 생성
+graphObj <- graph_from_data_frame(d = actorsWdf, directed = FALSE)
 
-# 배우별 나머지 3960명과의 최단거리를 구함
-shortPath <- shortest.paths(graphDf)
+# graph 객체 출력
+print(graphObj)
+
+# 각 배우별 나머지 배우들(3960명)과의 최단거리 계산
+shortPath <- shortest.paths(graphObj)
 
 # 차원수 보기
 dim(shortPath)
 
 # 최단거리 미리보기
 shortPath[1:10, 1:10]
+
+# [에제] 1번 꼭지점인 이휘재와 직접 연결된 배우(들) 추출
+vrtis <- shortPath['이휘재', ] %>% 
+  purrr::when(. == 1) %>% 
+  which() %>% 
+  names()
+
+print(vrtis)
+
+# 이휘재와 직접 연결된 배우들 중 전노민과 직접 연결된 배우(들) 확인
+vrtis <- shortPath[vrtis, '전노민'] %>% 
+  purrr::when(. == 1) %>% 
+  which() %>% 
+  names()
+
+print(vrtis)
+
+
+# 이휘재(1번 꼭지점)와 직접 연결된 네트워크 그래프 그려보기
+edges <- E(graphObj)[1%--%V(graphObj)]
+
+graphPlt1 <- subgraph.edges(graph = graphObj, eids = edges) %>% 
+  simplify(remove.multiple = TRUE, remove.loops = TRUE)
+
+plot(x = graphPlt1,
+     vertex.color = 'gold',
+     vertex.frame.color = 'white',
+     vertex.shape = "circle",
+     vertex.size = 20,
+     #vertex.label = NULL,
+     vertex.label.color = "gray20",
+     vertex.label.family = 'NanumGothic',
+     vertex.label.font = 2,
+     vertex.label.cex = 0.7,
+     #vertex.label.dist = 1,
+     #vertex.label.degree = 0,
+     edge.color = "gray50",
+     edge.width = 0.8,
+     #edge.lty = 1,
+     edge.curved = 0.2,
+     margin = c(0,0,0,0)
+     )
+
+
+# 이휘재와 전노민 사이에 연결된 꼭지점들로 확대한 네트워크 그래프 그리기
+# vrtis <- get.edges(graph = graphObj, es = E(graphObj)[inc(1)])[, 2] %>% c(1)
+edges <- E(graphObj)[c('이휘재', vrtis)%--%V(graphObj)]
+
+graphPlt2 <- subgraph.edges(graph = graphObj, eids = edges) %>% 
+  simplify(remove.multiple = TRUE, remove.loops = TRUE)
+
+plot(x = graphPlt2,
+     vertex.color = 'gold',
+     vertex.frame.color = 'white',
+     vertex.shape = "circle",
+     vertex.size = 16,
+     #vertex.label = NULL,
+     vertex.label.color = "gray20",
+     vertex.label.family = 'NanumGothic',
+     vertex.label.font = 2,
+     vertex.label.cex = 0.7,
+     #vertex.label.dist = 1,
+     #vertex.label.degree = 0,
+     edge.color = "gray50",
+     edge.width = 0.8,
+     #edge.lty = 1,
+     edge.curved = 0.2,
+     margin = c(0,0,0,0)
+     )
+
 
 # 최단거리 범위 확인
 # 자기 자신은 0, 서로 연결되지 않은 경우 Inf 값을 가짐
@@ -294,144 +397,22 @@ shortPath <- ifelse(test = (shortPath == Inf), yes = 99, no = shortPath)
 pathMean <- data.frame(mean = rowMeans(x = shortPath, na.rm = TRUE))
 
 # 배우코드 열 추가
-pathMean$acode <- rownames(pathMean)
+pathMean$anameNew <- rownames(pathMean)
 
 # 행 이름 삭제
 rownames(pathMean) <- c()
 
 # 배우 정보 병합
-actorInfo <- merge(x = pathMean,
-                   y = unique(actorList[, c('acode', 'aname')]),
-                   by = 'acode', 
-                   all.x = TRUE)
+actorName <- merge(x = actorName,
+                   y = pathMean,
+                   by = 'anameNew', 
+                   all.Y = TRUE)
 
 # 최단거리 짧은 기준으로 정렬
-actorInfo <- actorInfo[order(actorInfo$mean, decreasing = FALSE), ]
+actorName <- actorName[order(actorName$mean, decreasing = FALSE), ]
 
 # 상위 20명 확인
-head(x = actorInfo, n = 20L)
-
-
-# 네트워크 맵 그리기
-plot(graphDf)
-plot(graphDf,
-     edge.arrow.size = 0.5,
-     vertex.color = "gold",
-     vertex.size = 15,
-     vertex.frame.color = "gray",
-     vertex.label.color = "black", 
-     vertex.label.cex = 0.8,
-     vertex.label.dist = 2,
-     edge.curved = 0.2) 
-
-
+head(x = actorName, n = 20L)
 
 # save Rdata
-save.image(file = 'korean_six_degrees_20180219.Rdata')
-
-
-# 네트워크 그래프 그리기
-# 배우 간 행렬로부터 방향성 없는 무향 네트워크 객체 생성
-actorsNet <- network(actorsMat, directed = FALSE)
-actorsNet
-
-# 각 꼭지점별 중개 중심성(betweenness centrality) 계산
-# [주의] igraph의 betweenness()와 충돌!! 
-actorsBtw <- sna::betweenness(actorsNet)
-length(actorsBtw)
-
-# degree 계산
-degree <- degree(netActors)
-length(degree)
-
-
-# 배우 간 행렬에 betweenness와 degree 컬럼 붙이기
-snResult <- data.frame(actorCode=rownames(actorsMat), btwness=btwness, degree=degree)
-snResult
-
-actors2 <- merge(actors1, snResult, by='actorCode', all.x=T)
-actors2 <- actors2[is.na(actors2$btwness)==F,]
-
-actors2 <- actors2[order(actors2$btwness, decreasing=T),]
-head(actors2,20)
-
-actors2 <- actors2[order(actors2$degree, decreasing=T),]
-head(actors2,20)
-
-
-
-
-
-## SNA
-# betweenness로 히스토그램 그리기
-hist(btwness, breaks=50)
-
-# betweenness가 90 percentile인 값 확인
-qant90 <- quantile(btwness, probs=0.9)
-qant90
-
-# betweenness가 상위 90%인 노드에 색 입히기
-netActors %v% 'mode' <- ifelse(btwness > qant90, 'Star', 'Normal')
-nodeColor <- c('Star'='gold', 'Normal'='gray80')
-
-# node edge 크기 설정
-set.edge.value(netActors, 'edgeSize', actorsMat*2)
-
-# 네트워크 맵 그리기
-ggnet2(netActors,             # 네트워크 객체
-       label=TRUE,            # 노드에 라벨 표현 여부
-       label.size=3,          # 레이블 폰트 사이즈
-       color='mode',          # 노드 색상 구분 기준
-       palette=nodeColor,     # 노드 색상 설정
-       size='degree',         # 노드 크기를 연결정도 중심성에 따라 다르게 하기
-       edge.size='edgeSize',  # 엣지 굵기를 단어 간 상관계수에 따라 다르게 하기
-       mode='circrand',
-       family='NanumGothic')
-
-
-
-
-# 키워드만 추출 
-keyActors <- c('장광','이한위','김갑수')
-keyActors <- actors2$actorCode[actors2$actorName %in% keyActors]
-keyActors
-
-# 키워드의 행, 열 제외
-actorsMat1 <- actorsMat[, keyActors]
-actorsMat1 <- actorsMat1[!rownames(actorsMat1) %in% keyActors,]
-
-# 행의 합이 0 초과인 값만 남기기
-actorsMat1 <- actorsMat1[rowSums(actorsMat1)>0,]
-
-# 앞에서 생성한 배우 간 행렬을 이용하여 네트워크 객체를 생성
-# 비대칭형 네트워크인 경우, matrix.type='bipartite'를 추가해주어야 함
-netActors1 <- network(actorsMat1, directed=F, matrix.type='bipartite')
-netActors1
-
-# 각 꼭지점별 중개 중심성(betweenness centrality) 계산
-btwness <- betweenness(netActors1)
-length(btwness)
-
-# 각 꼭지점별 연결 중심성(degree centrality) 계산
-degree <- degree(netActors1)
-length(degree)
-
-# 컬러 지정
-percent90 <- quantile(betweenness(netActors1), probs=0.9)
-netActors1 %v% 'color' <- ifelse(betweenness(netActors1)>percent90, 'big', 'small')
-colors <- c('small'='grey', 'big'='gold')
-
-set.edge.value(netActors1, 'edgeSize', actorsMat1[actorsMat1>0])
-
-
-# 네트워크 그리기
-ggnet2(netActors1,
-       label=TRUE,
-       label.size=3,
-       color='color',
-       palette=colors,
-       edge.size='edgeSize',
-       size=degree(actorsMat1),
-       mode='fruchtermanreingold',
-       family='NanumGothic')
-
+# save.image(file = 'korean_six_degrees_20180220.Rdata')
