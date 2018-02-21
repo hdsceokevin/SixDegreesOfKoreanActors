@@ -6,7 +6,7 @@ output: html_document
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE, out.width = '750px', dpi = 300)
+knitr::opts_chunk$set(echo = TRUE, fig.width=12, fig.height=8)
 ```
 
 Kevin Bacon의 여섯 다리(Six Degrees of Kevin Bacon)는 어떤 배우와 Kevin Bacon까지 최단의 연결 고리를 만드는 놀이입니다. 같은 영화에 출연했다면 연결고리는 1이 되고, 같은 영화에 출연한 어떤 배우와 다른 영화에서 함께 출연한 배우라면 2가 되는 식이죠. Kevin Bacon이 다작(多作)하는 배우라는 인식 때문에 생겨난 놀이라고 할 수 있습니다.^[더 자세한 내용은 [위키백과 Kevin Bacon의 여섯 다리](https://ko.wikipedia.org/wiki/%EC%BC%80%EB%B9%88_%EB%B2%A0%EC%9D%B4%EC%BB%A8%EC%9D%98_%EC%97%AC%EC%84%AF_%EB%8B%A4%EB%A6%AC)를 참조하세요]
