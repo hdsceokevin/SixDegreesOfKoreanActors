@@ -57,7 +57,9 @@ plot(x = table(movies$mYear, exclude = c('한국', '2020')),
      ylab = '영화수(편)',
      main = '연도별 한국영화 제작편수')
 
-  
+# 2010년 이후 영화만
+movies <- movies %>% filter(mYear >= '2010')
+
 # 영화별 출연 배우 데이터 불러오기
 actors <- readRDS(file = 'korean_movie_actor_20200327.RDS')
 str(object = actors)
@@ -249,6 +251,13 @@ dim(x = actorsMat)
 # 미리보기
 actorsMat[1:10, 1:10]
 
+# 열 합계 생성
+actorWith <- colSums(x = actorsMat) %>% as.data.frame()
+actorWith$aNameNew <- rownames(x = actorWith)
+rownames(x = actorWith) <- NULL
+colnames(x = actorWith)[1] <- 'withCnt'
+
+
 # save Rdata
 fileName <- str_c('korean_six_degrees_', wdate, '.Rdata')
 save.image(file = fileName)
@@ -259,7 +268,7 @@ save.image(file = fileName)
 # 1. 배우-배우 행렬에서 원소의 값이 1인 열 번호만 수집
 # 2. 네트워크 객체로 만들기 위해 행의 배우코드를 'from', 열은 'to'로 지정
 # 3. 위 데이터를 graph 객체로 변환 (방향성 없는 '무향'으로 만듬)
-# 4. 배우별 from에서 to에 이르는 가장 짧은 거리를 구함 (연결이 안되면 99로 변환)
+# 4. 배우별 from에서 to에 이르는 가장 짧은 거리를 구함 (연결이 안되면 NA로 변환)
 # 5. 배우별 거리 평균을 구함. 이 값이 가장 작은 배우를 한국판 케빈 베이컨으로 지정!! 
 
 # 필요 패키지 불러오기
@@ -302,7 +311,7 @@ graphObj <- graph_from_data_frame(d = actorsWdf,
 # graph 객체 출력
 print(x = graphObj)
 
-# 각 배우별 나머지 배우들(3960명)과의 최단거리 계산
+# 각 배우별 나머지 배우들과의 최단거리 계산
 shortPath <- shortest.paths(graph = graphObj)
 
 # 차원수 보기
@@ -318,9 +327,9 @@ range(shortPath)
 # Inf 값을 제외하고 가장 큰 값 확인
 range(shortPath, finite = TRUE)
 
-# 서로 연결되는 않은 배우 간 거리를 99로 치환
+# 서로 연결되는 않은 배우 간 거리를 NA로 치환
 shortPath <- ifelse(test = (shortPath == Inf), 
-                    yes = 99, 
+                    yes = NA, 
                     no = shortPath)
 
 # 행 기준으로 최단거리의 평균 구하기
@@ -337,16 +346,16 @@ colnames(x = pathMean)[1] <- 'pathMean'
 rownames(x = pathMean) <- NULL
 
 # 배우 정보와 병합
-resultKoKB <- merge(x = actorName,
-                    y = pathMean,
-                    by = 'aNameNew', 
-                    all.Y = TRUE)
+result <- actorName %>% 
+  merge(y = pathMean, by = 'aNameNew', all.x = TRUE) %>% 
+  merge(y = actorWith, by = 'aNameNew', all.x = TRUE)
 
-# 최단거리 평균을 기준으로 오름차순 정렬
-resultKoKB <- resultKoKB %>% arrange(pathMean)
-
-# 상위 20명 확인
-head(x = resultKoKB, n = 20L)
+# 함께 출연한 배우 20명 이상인 배우 대상으로 최단거리 평균을
+# 기준으로 오름차순 정렬 후 상위 10명 확인
+result %>% 
+  filter(withCnt >= 20) %>% 
+  arrange(pathMean) %>% 
+  slice(1:10)
 
 
 # 최단거리가 가장 짧은 배우와 직접 연결된 네트워크 그래프 그리기
