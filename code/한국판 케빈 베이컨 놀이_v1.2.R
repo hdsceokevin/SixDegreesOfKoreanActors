@@ -263,7 +263,7 @@ fileName <- str_c('korean_six_degrees_', wdate, '.Rdata')
 save.image(file = fileName)
 
 
-# part 3. 한국판 케빈 베이컨의 찾기 ----
+# part 3. 한국판 케빈 베이컨 찾기
 
 # 1. 배우-배우 행렬에서 원소의 값이 1인 열 번호만 수집
 # 2. 네트워크 객체로 만들기 위해 행의 배우코드를 'from', 열은 'to'로 지정
