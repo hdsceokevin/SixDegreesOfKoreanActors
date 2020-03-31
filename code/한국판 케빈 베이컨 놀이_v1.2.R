@@ -432,4 +432,10 @@ plot(x = graphPlt2,
 
 
 # save Rdata
+fileName <- str_c('korean_six_degrees_', wdate, '.Rdata')
 save.image(file = fileName)
+
+load(file = fileName)
+
+
+## End of Document
